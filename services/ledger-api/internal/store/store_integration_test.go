@@ -29,7 +29,7 @@ func TestMain(m *testing.M) { os.Exit(run(m)) }
 
 func run(m *testing.M) int {
 	ctx := context.Background()
-	pg, err := tcpostgres.Run(ctx, "postgres:18-alpine",
+	pg, err := tcpostgres.Run(ctx, "postgres:19.0-alpine",
 		tcpostgres.WithDatabase("ledger"), tcpostgres.WithUsername("app"), tcpostgres.WithPassword("app"),
 		testcontainers.WithWaitStrategy(wait.ForLog("database system is ready to accept connections").WithOccurrence(2).WithStartupTimeout(60*time.Second)))
 	if err != nil {
