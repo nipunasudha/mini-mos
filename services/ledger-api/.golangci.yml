@@ -1,0 +1,9 @@
+version: "2"
+linters:
+  settings:
+    errcheck:
+      # Deferred Rollback after Commit and Close on shutdown paths have nothing useful to report.
+      exclude-functions:
+        - (github.com/jackc/pgx/v5.Tx).Rollback
+        - (*database/sql.DB).Close
+        - (net/http.ResponseWriter).Write
