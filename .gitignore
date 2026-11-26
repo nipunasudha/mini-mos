@@ -1,0 +1,53 @@
+# Local-only planning notes
+guideline/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Go
+bin/
+dist/
+*.test
+*.out
+coverage.*
+go.work
+go.work.sum
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+*-sa-key.json
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+.kube/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Helm
+charts/*/charts/
+charts/*/*.tgz
