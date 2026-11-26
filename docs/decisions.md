@@ -16,3 +16,7 @@ ADR-lite log: one row per non-obvious decision.
 | 2026-11-26 | No CPU limits | Avoid CFS throttling; memory limits kept | CPU limits everywhere |
 | 2026-11-26 | JSON events, no schema registry | Scope | Avro/Protobuf + registry (next step) |
 | 2026-11-26 | No shared Go library between services | Duplicating ~30 lines of config/metrics helpers keeps services independent (self-service story) | `pkg/` shared module |
+| 2026-11-26 | E2E tests in Go (`tests/e2e`), not a shell script | Real assertions, polling with timeouts, readable failures; same code runs against compose and GKE | `acceptance.sh` in bash (brittle; kept only as `scripts/demo.sh` for show) |
+| 2026-11-26 | Test-only admin endpoint to create clients (`ADMIN_API_ENABLED`) | Isolated, repeatable e2e runs and demo rehearsals on a long-lived DB | Fixed seed + run-order-dependent tests; direct DB access from tests |
+| 2026-11-26 | Terratest in three tiers behind build tags (static, plan, provisioning) | Static/plan tiers are free and safe for CI; the apply tier costs money and needs admin rights | One all-or-nothing infra test; no infra tests |
+| 2026-11-26 | Terratest apply tier runs locally only | Avoids granting CI apply rights to the GCP project | `workflow_dispatch` job with an admin SA |
