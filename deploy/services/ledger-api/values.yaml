@@ -2,7 +2,7 @@
 name: ledger-api
 image:
   repository: us-east1-docker.pkg.dev/project-819c8f08-cfa4-43ca-82a/mini-mos/ledger-api
-  tag: "bootstrap"
+  tag: "82852ee4eedec070b800f26cd2109759b7b22701"
 replicas: 2
 args: ["serve"]
 initMigrate:
