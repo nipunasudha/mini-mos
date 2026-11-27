@@ -36,12 +36,13 @@ spec:
               limits:
                 memory: 1500Mi # memory limit kept, no CPU limit (see decisions.md)
         grafana:
+          # Grafana 12 peaks around 300 MB at startup; 256Mi got it OOMKilled in a loop.
           resources:
             requests:
               cpu: 50m
-              memory: 128Mi
-            limits:
               memory: 256Mi
+            limits:
+              memory: 512Mi
         alertmanager:
           alertmanagerSpec:
             resources:
