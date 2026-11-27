@@ -1,0 +1,61 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Values.name }}
+  labels:
+    {{- include "service.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "service.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        {{- with .Values.networkPolicy.allowFrom }}
+        # Callers: pods in this namespace, picked by app name.
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  {{- toYaml . | nindent 18 }}
+        {{- end }}
+        # Prometheus scrapes from the monitoring namespace.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: {{ .Values.port }}
+  # ponytail: simplified from the spec. One render cannot see which other apps list
+  # this one in their allowFrom, so egress is "any mini-MOS service on 8080" rather
+  # than exactly those apps. Ingress on the callee is still the strict side.
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    # Kafka (Strimzi pods)
+    - to:
+        - podSelector:
+            matchLabels:
+              strimzi.io/cluster: mos-kafka
+      ports:
+        - port: 9092
+    # Postgres (CNPG pods)
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: mos-pg
+      ports:
+        - port: 5432
+    # Other mini-MOS services
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: mini-mos
+      ports:
+        - port: 8080

@@ -1,0 +1,30 @@
+# Defaults for every service. A service's deploy/services/<name>/values.yaml
+# overrides these; name, image.repository and image.tag have no default on
+# purpose, and the templates fail the render if they are missing.
+name: ""
+image:
+  repository: ""
+  tag: ""
+replicas: 2
+port: 8080
+args: []
+env: {}              # plain key: value
+envFromSecrets: []   # [{name: DATABASE_URL, secret: mos-pg-app, key: uri}]
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {memory: 128Mi} # no CPU limit: avoids CFS throttling
+probes:
+  readinessPath: /readyz
+  livenessPath: /healthz
+initMigrate:
+  enabled: false     # true: init container runs the same image with args ["migrate"]
+service:
+  enabled: true
+serviceAccount:
+  gcpServiceAccount: "" # set to bind a GCP service account (Workload Identity)
+metrics:
+  enabled: true
+networkPolicy:
+  allowFrom: []      # app names allowed to call this service
+pdb:
+  enabled: false

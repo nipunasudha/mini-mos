@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  labels:
+    {{- include "service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "service.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.name }}
+      automountServiceAccountToken: {{ include "service.automountToken" . }}
+      # The distroless "nonroot" user is uid 65532. The image names it, and the
+      # kubelet can only verify runAsNonRoot against a number.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if .Values.initMigrate.enabled }}
+      initContainers:
+        # Runs before the app starts, so the schema is ready. Two replicas may
+        # run it at once; the migration itself takes a Postgres advisory lock.
+        - name: migrate
+          image: {{ include "service.image" . }}
+          args: ["migrate"]
+          {{- include "service.env" . | nindent 10 }}
+          securityContext:
+            {{- include "service.containerSecurityContext" . | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.name }}
+          image: {{ include "service.image" . }}
+          {{- with .Values.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- include "service.env" . | nindent 10 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.port }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readinessPath }}
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.livenessPath }}
+              port: http
+            periodSeconds: 10
+          # Same path as liveness. It holds liveness off until the app first
+          # answers, so a slow start (waiting on Kafka or the DB) is not killed.
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.livenessPath }}
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- include "service.containerSecurityContext" . | nindent 12 }}

@@ -1,0 +1,19 @@
+# ledger-api's whole platform contract. CI rewrites image.tag on every merge to main.
+name: ledger-api
+image:
+  repository: asia-south1-docker.pkg.dev/project-819c8f08-cfa4-43ca-82a/mini-mos/ledger-api
+  tag: "bootstrap"
+replicas: 2
+args: ["serve"]
+initMigrate:
+  enabled: true
+env:
+  KAFKA_BROKERS: mos-kafka-kafka-bootstrap.mos.svc:9092
+  # Dev only: e2e tests and the demo create their own clients through this endpoint.
+  ADMIN_API_ENABLED: "true"
+envFromSecrets:
+  - {name: DATABASE_URL, secret: mos-pg-app, key: uri}
+networkPolicy:
+  allowFrom: [bill-scheduler]
+pdb:
+  enabled: true
