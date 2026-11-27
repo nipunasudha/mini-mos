@@ -8,7 +8,7 @@ variable "name" {
 }
 
 variable "location" {
-  description = "Zone, e.g. asia-south1-a. A zone (not a region) makes a zonal cluster: one control plane, no regional surcharge."
+  description = "Zone, e.g. us-east1-b. A zone (not a region) makes a zonal cluster: one control plane, no regional surcharge."
   type        = string
 }
 

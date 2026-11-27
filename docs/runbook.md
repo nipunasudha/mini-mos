@@ -6,21 +6,16 @@ Needs: `gcloud` (logged in), `gke-gcloud-auth-plugin` (`gcloud components instal
 
 ## 1. One-time bootstrap
 
-Done once per GCP project, by hand. Terraform does not manage the APIs or the state bucket: it cannot create its own backend, and disabling an API on destroy would break the next apply.
+Done once per GCP project, by hand. Only the state bucket is manual: Terraform cannot create its own backend. The APIs are enabled by Terraform itself (`google_project_service`, with `disable_on_destroy = false` so a destroy never switches them off).
 
 ```sh
 export PROJECT=<your-project-id>
-export REGION=asia-south1
+export REGION=us-east1
 export BUCKET=$PROJECT-mini-mos-tfstate
 
 gcloud auth login
 gcloud auth application-default login      # Terraform and Terratest use these credentials
 gcloud config set project $PROJECT
-
-gcloud services enable \
-  container.googleapis.com compute.googleapis.com artifactregistry.googleapis.com \
-  iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com \
-  cloudresourcemanager.googleapis.com
 
 # State bucket, with versioning so a bad apply can be rolled back.
 gcloud storage buckets create gs://$BUCKET --location=$REGION --uniform-bucket-level-access
@@ -91,12 +86,13 @@ kubectl get pv                      # expect: No resources found
 gcloud compute disks list --filter="name~^pvc-"   # expect: empty (or only disks from other clusters)
 ```
 
-If a disk is left, delete it by hand: `gcloud compute disks delete <name> --zone asia-south1-a`. Only then:
+If a disk is left, delete it by hand: `gcloud compute disks delete <name> --zone us-east1-b`. Only then:
 
 ```sh
-cd infra/envs/dev
-terraform destroy
+make infra-down     # = terraform destroy -target=module.network in infra/envs/dev
 ```
+
+`infra-down` destroys the network and everything built on it: NAT, the cluster, its nodes and Argo CD. That's everything that costs money. It keeps the registry, the WIF pool and the CI service accounts, which are free. A deleted WIF pool ID is reserved for 30 days, so destroying it daily would break the next apply. `make infra-up` brings the cluster back. To remove everything for good (end of the project), run `terraform destroy` without `-target`.
 
 Destroy time: **to be measured**. After it, only the state bucket and the Artifact Registry images should remain: check `gcloud container clusters list`, `gcloud compute disks list`, `gcloud compute networks list`.
 

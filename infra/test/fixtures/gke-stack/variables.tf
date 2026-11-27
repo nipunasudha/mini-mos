@@ -19,10 +19,10 @@ variable "github_repo" {
 
 variable "region" {
   type    = string
-  default = "asia-south1"
+  default = "us-east1"
 }
 
 variable "zone" {
   type    = string
-  default = "asia-south1-a"
+  default = "us-east1-b"
 }

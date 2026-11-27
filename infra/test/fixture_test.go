@@ -18,10 +18,10 @@ import (
 // Helpers shared by the plan and provisioning tiers.
 
 const (
-	gkeStackDir  = "fixtures/gke-stack"
-	platformDir  = "fixtures/platform"
-	githubRepo   = "nipunasudha/mini-mos"
-	asiaSouthOne = "asia-south1"
+	gkeStackDir = "fixtures/gke-stack"
+	platformDir = "fixtures/platform"
+	githubRepo  = "nipunasudha/mini-mos"
+	usEastOne   = "us-east1"
 )
 
 // projectID reads the GCP project from the environment. It is never committed.

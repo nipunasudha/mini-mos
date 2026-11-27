@@ -1,7 +1,7 @@
 # bill-scheduler's whole platform contract. CI rewrites image.tag on every merge to main.
 name: bill-scheduler
 image:
-  repository: asia-south1-docker.pkg.dev/project-819c8f08-cfa4-43ca-82a/mini-mos/bill-scheduler
+  repository: us-east1-docker.pkg.dev/project-819c8f08-cfa4-43ca-82a/mini-mos/bill-scheduler
   tag: "bootstrap"
 replicas: 2
 env:

@@ -22,7 +22,7 @@ permissions:
 env:
   # Until the owner sets the GCP_* repo variables, PRs still need a valid image name to build
   # and scan, so fall back to placeholders. Pushing is gated on main, where the variables must exist.
-  REGISTRY: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev
+  REGISTRY: ${{ vars.GCP_REGION || 'us-east1' }}-docker.pkg.dev
   # Same version as the Makefile `lint` target, so a lint result is the same locally and in CI.
   GOLANGCI_LINT_VERSION: v2.15.0
 
@@ -90,7 +90,7 @@ jobs:
       run:
         working-directory: services/${{ matrix.svc }}
     env:
-      IMAGE: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT || 'unset' }}/mini-mos/${{ matrix.svc }}:${{ github.sha }}
+      IMAGE: ${{ vars.GCP_REGION || 'us-east1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT || 'unset' }}/mini-mos/${{ matrix.svc }}:${{ github.sha }}
       # Only main may push images; PRs and dispatches from other branches just verify.
       # Push only from main, and only once Terraform has created the registry and the repo
       # variables exist. Before that, main builds still lint, test and scan.

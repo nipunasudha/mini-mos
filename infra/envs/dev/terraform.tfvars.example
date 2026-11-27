@@ -6,6 +6,6 @@ state_bucket = "my-gcp-project-mini-mos-tfstate"
 master_authorized_cidrs = ["203.0.113.7/32"]
 
 # Defaults, shown for reference:
-# region      = "asia-south1"
-# zone        = "asia-south1-a"
+# region      = "us-east1"
+# zone        = "us-east1-b"
 # github_repo = "nipunasudha/mini-mos"

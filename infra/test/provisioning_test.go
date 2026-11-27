@@ -129,7 +129,7 @@ func TestGKEStackProvisioning(t *testing.T) {
 		repo := terraform.OutputContext(t, t.Context(), opts, "repository_id")
 		shell.RunCommandContext(t, t.Context(), &shell.Command{
 			Command: "gcloud",
-			Args:    []string{"artifacts", "repositories", "describe", repo, "--location", asiaSouthOne, "--project", project},
+			Args:    []string{"artifacts", "repositories", "describe", repo, "--location", usEastOne, "--project", project},
 		})
 	})
 }

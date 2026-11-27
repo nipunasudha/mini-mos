@@ -2,7 +2,7 @@ SERVICES := ledger-api bill-scheduler
 # Pinned: lint results should not change because a new linter release came out.
 LINT_IMAGE := golangci/golangci-lint:v2.15.0
 
-.PHONY: compose-up compose-down test test-integration lint e2e demo
+.PHONY: compose-up compose-down test test-integration lint e2e demo infra-up infra-down
 
 compose-up:
 	docker compose up -d --build --wait
@@ -47,3 +47,16 @@ infra-test-plan:
 
 infra-test-live:
 	cd infra/test && go test -v -count=1 -timeout 60m -tags provisioning -run TestGKEStackProvisioning ./...
+
+# Daily cluster lifecycle for envs/dev. infra-down destroys the network and everything
+# built on it (NAT, cluster, nodes, Argo CD) but keeps the registry, the WIF pool and the
+# CI service accounts: those are free, and a deleted WIF pool ID is reserved for 30 days.
+# Run the pre-destroy step in docs/runbook.md first, so no persistent disks are left behind.
+# `cd infra/envs/dev && terraform destroy` (no -target) removes everything, for good.
+DEV := infra/envs/dev
+
+infra-up:
+	cd $(DEV) && terraform apply
+
+infra-down:
+	cd $(DEV) && terraform destroy -target=module.network
