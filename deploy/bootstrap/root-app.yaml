@@ -1,0 +1,29 @@
+# Reference copy of the app-of-apps root. Terraform (infra/envs/dev/argocd.tf, via the
+# argocd-apps chart) creates the real one; keep the two in step. Applying this by hand
+# is only for debugging.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  # Deleting root cascades to every child, which cascades to their workloads.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nipunasudha/mini-mos.git # public repo: no credentials needed
+    targetRevision: main
+    path: deploy/platform
+    directory:
+      # Read only the top-level YAML files (the child Applications). The subfolders
+      # (mos-kafka/, mos-postgres/, ...) are owned by their own child Application;
+      # recursing would make two Applications own the same resources.
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc # in-cluster
+    namespace: argocd # child Application objects live next to Argo CD itself
+  syncPolicy:
+    automated:
+      prune: true # a file deleted from git removes the child
+      selfHeal: true # manual drift is reverted

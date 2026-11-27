@@ -1,0 +1,35 @@
+# Strimzi operator: turns Kafka / KafkaNodePool / KafkaTopic CRs into a running broker.
+# Wave -3 so its CRDs exist before mos-kafka (wave -2) is synced.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: strimzi-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://strimzi.io/charts/
+    chart: strimzi-kafka-operator
+    targetRevision: 1.3.1 # pinned: current stable at build time (see docs/versions.md)
+    helm:
+      valuesObject:
+        # Operator lives in `strimzi` but only watches `mos`: least privilege, and the
+        # chart creates the RoleBindings there (hence the wave -4 namespace).
+        watchNamespaces:
+          - mos
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: strimzi
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The Kafka CRD is ~350 KB; client-side apply stores the whole object in the
+      # last-applied annotation, which is capped at 256 KB. Server-side apply has no such cap.
+      - ServerSideApply=true

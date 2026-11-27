@@ -1,0 +1,40 @@
+# The Kafka cluster (Strimzi). Broker + controller run in the single pod of the
+# `dual-role` node pool (kafka-nodepool.yaml), so the pod is mos-kafka-dual-role-0 and
+# clients bootstrap at mos-kafka-kafka-bootstrap.mos.svc:9092.
+# Demo-grade on purpose: one node, plaintext, replication factor 1 (see docs/decisions.md).
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: mos-kafka
+  namespace: mos
+  # Strimzi 1.x is KRaft-only and always uses node pools, so the old
+  # strimzi.io/node-pools and strimzi.io/kraft annotations no longer exist: none needed.
+spec:
+  kafka:
+    # Newest Kafka that Strimzi 1.3.1 supports (4.2.x and 4.3.x). Compose uses apache/kafka
+    # 4.4.0, which this operator release does not support yet; the client protocol is compatible.
+    # metadataVersion is left unset: it defaults to the one matching this version.
+    version: 4.3.2
+    listeners:
+      # Internal, unauthenticated, no TLS: only in-cluster services talk to it, and
+      # NetworkPolicy limits who can reach the namespace. Matches the compose setup.
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+    config:
+      # One broker: internal topics and defaults cannot be replicated more than once.
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
+      # Topics exist only as KafkaTopic CRs, so a typo'd topic name fails loudly instead
+      # of silently creating a 1-partition topic.
+      auto.create.topics.enable: false
+  entityOperator:
+    # Reconciles KafkaTopic CRs into real topics. It is also what recreates the topics
+    # after a broker restart, because the broker's storage is ephemeral.
+    topicOperator: {}
+  # Exposes kafka_consumergroup_lag (and friends); M3's consumer-lag panel and alert use it.
+  kafkaExporter: {}

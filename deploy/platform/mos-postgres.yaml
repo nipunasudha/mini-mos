@@ -1,0 +1,27 @@
+# Points at the CNPG Cluster CR in deploy/platform/mos-postgres/.
+# Wave -2: after the CNPG operator and its CRDs (wave -3), before the services (wave 0).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mos-postgres
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nipunasudha/mini-mos.git
+    targetRevision: main
+    path: deploy/platform/mos-postgres
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mos
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # See mos-kafka.yaml: tolerate the Cluster CRD not being registered at dry-run time.
+      - SkipDryRunOnMissingResource=true

@@ -1,0 +1,12 @@
+# Topic from spec section 6. The CR name is the topic name (dots are valid in Kubernetes
+# names), so no spec.topicName is needed.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: pots.shortfall
+  namespace: mos
+  labels:
+    strimzi.io/cluster: mos-kafka # which Kafka cluster the Topic Operator creates it in
+spec:
+  partitions: 3
+  replicas: 1 # single broker

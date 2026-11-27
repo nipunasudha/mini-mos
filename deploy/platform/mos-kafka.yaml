@@ -1,0 +1,28 @@
+# Points at the Kafka CRs in deploy/platform/mos-kafka/ (Kafka, KafkaNodePool, KafkaTopics).
+# Wave -2: after the Strimzi operator and its CRDs (wave -3), before the services (wave 0).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mos-kafka
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nipunasudha/mini-mos.git
+    targetRevision: main
+    path: deploy/platform/mos-kafka
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mos
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Belt and braces: the CRDs arrive from wave -3, but if Argo's dry-run ever runs
+      # before they are registered, don't fail the sync on "unknown kind".
+      - SkipDryRunOnMissingResource=true

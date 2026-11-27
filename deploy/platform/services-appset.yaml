@@ -1,0 +1,48 @@
+# One Application per folder under deploy/services/. Adding a service = adding a folder.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: mos-services
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  # Applications may differ from this template in spec.syncPolicy. Scripts and the
+  # demo pause auto-sync on bill-scheduler (scale to 0 to watch lag climb, or to
+  # reset offsets); without this the ApplicationSet would revert that at once.
+  # Self-heal for ledger-api stays on.
+  ignoreApplicationDifferences:
+    - jsonPointers: ["/spec/syncPolicy"]
+  generators:
+    - git:
+        repoURL: https://github.com/nipunasudha/mini-mos.git
+        revision: main
+        directories:
+          - path: deploy/services/*
+  template:
+    metadata:
+      name: "{{.path.basename}}"
+    spec:
+      project: default
+      sources:
+        - repoURL: https://github.com/nipunasudha/mini-mos.git
+          targetRevision: main
+          path: charts/service
+          helm:
+            # $values refers to the second source below.
+            valueFiles:
+              - "$values/deploy/services/{{.path.basename}}/values.yaml"
+        - repoURL: https://github.com/nipunasudha/mini-mos.git
+          targetRevision: main
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: mos
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

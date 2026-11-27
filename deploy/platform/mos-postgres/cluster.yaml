@@ -1,0 +1,25 @@
+# Postgres via CloudNativePG: one instance (no HA, demo only). The operator also creates
+# the secret `mos-pg-app` (keys include `uri`), which ledger-api reads for DATABASE_URL,
+# and the Services mos-pg-rw / mos-pg-ro.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: mos-pg
+  namespace: mos
+spec:
+  instances: 1
+  bootstrap:
+    initdb:
+      database: ledger
+      owner: app
+  # No postgres superuser secret: the app owns its database and nothing needs more.
+  enableSuperuserAccess: false
+  storage:
+    size: 5Gi # per spec; the one persistent volume in the platform
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 512Mi # memory limit kept, no CPU limit
+  # monitoring is off for now: M3 can enable it with a PodMonitor.

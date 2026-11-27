@@ -1,0 +1,14 @@
+# Namespace `mos` is created here, at the earliest wave, instead of relying on
+# CreateNamespace=true in a child. The Strimzi chart creates RoleBindings inside its
+# watched namespace (mos) when strimzi-operator syncs at wave -3, so mos must already
+# exist by then. Other namespaces (strimzi, cnpg-system, monitoring) belong to a single
+# app each and are created by that app's CreateNamespace=true.
+#
+# This file is read by the root app, so it is a plain manifest applied in argocd's
+# destination cluster, not a child Application.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mos
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"

@@ -1,0 +1,86 @@
+# Prometheus Operator + Prometheus + Grafana + node-exporter + kube-state-metrics.
+# Wave -3 so the ServiceMonitor/PodMonitor/PrometheusRule CRDs exist before anything
+# (M3's mos-observability, the services' charts) creates those objects.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 94.1.0 # pinned: current stable at build time
+    helm:
+      valuesObject:
+        prometheus:
+          prometheusSpec:
+            # By default Prometheus only selects monitors/rules labelled with this Helm
+            # release. `false` makes it select ALL of them in every namespace, so a
+            # service team's ServiceMonitor or PrometheusRule works with no special label.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            # Demo cluster is destroyed daily: short retention, no PVC (a persistent
+            # disk would outlive the cluster and keep billing).
+            retention: 2d
+            resources:
+              requests:
+                cpu: 200m
+                memory: 600Mi
+              limits:
+                memory: 1500Mi # memory limit kept, no CPU limit (see decisions.md)
+        grafana:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+        alertmanager:
+          alertmanagerSpec:
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 128Mi
+        # GKE runs the control plane for us and does not expose etcd, scheduler or
+        # controller-manager metrics; kube-proxy metrics are not reachable either
+        # (and kube-proxy is absent on Dataplane V2). Left on, they create permanently-down
+        # targets and firing "...Down" alerts. Their bundled rules are turned off too.
+        kubeEtcd:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        # GKE DNS is kube-dns, not CoreDNS, so the coreDns ServiceMonitor would find nothing.
+        coreDns:
+          enabled: false
+        defaultRules:
+          rules:
+            etcd: false
+            kubeSchedulerAlerting: false
+            kubeSchedulerRecording: false
+            kubeControllerManager: false
+            kubeProxy: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The Prometheus/Alertmanager CRDs are 600-850 KB, far over the 256 KB annotation
+      # limit of client-side apply.
+      - ServerSideApply=true

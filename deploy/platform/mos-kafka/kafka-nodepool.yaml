@@ -1,0 +1,30 @@
+# One node pool with a single pod that is both KRaft controller and broker
+# ("dual-role"). The pod is named <cluster>-<pool>-<id>, hence mos-kafka-dual-role-0.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual-role
+  namespace: mos
+  labels:
+    strimzi.io/cluster: mos-kafka # ties the pool to the Kafka CR above
+spec:
+  replicas: 1
+  roles:
+    - controller
+    - broker
+  # Ephemeral (emptyDir) on purpose: the demo cluster is destroyed daily, a broker
+  # restart only causes harmless redelivery, and GKE does not delete persistent disks
+  # on cluster destroy, so they would keep billing.
+  storage:
+    type: ephemeral
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1536Mi
+    limits:
+      memory: 1536Mi # memory limit kept, no CPU limit (avoids CFS throttling)
+  jvmOptions:
+    # Heap well under the container limit: the rest is off-heap and OS page cache.
+    # Equal min/max avoids heap resizing.
+    "-Xms": 768m
+    "-Xmx": 768m

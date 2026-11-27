@@ -1,0 +1,29 @@
+# CloudNativePG operator: reconciles `Cluster` CRs into Postgres pods, PVCs and secrets.
+# Wave -3 so its CRDs exist before mos-postgres (wave -2) is synced.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cnpg-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://cloudnative-pg.github.io/charts
+    chart: cloudnative-pg
+    targetRevision: 0.29.2 # pinned: current stable at build time (operator 1.30.2)
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cnpg-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The Cluster CRD is very large (over the 256 KB last-applied annotation limit of
+      # client-side apply); CNPG documents server-side apply for this reason.
+      - ServerSideApply=true
