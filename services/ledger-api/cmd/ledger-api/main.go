@@ -80,6 +80,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 
 	m := metrics.New()
 	apiServer := api.New(store.New(pool), m, cfg.AdminAPIEnabled)
+	// ReadHeaderTimeout stops slow-header (Slowloris) clients from holding connections open forever.
 	httpServer := &http.Server{Addr: ":" + cfg.Port, Handler: apiServer.Handler(), ReadHeaderTimeout: 5 * time.Second}
 
 	relay := &outbox.Relay{Pool: pool, Kafka: kc, Metrics: m, Interval: cfg.OutboxPollInterval, BatchSize: cfg.OutboxBatchSize}
