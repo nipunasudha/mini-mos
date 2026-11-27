@@ -1,0 +1,266 @@
+name: services
+
+# PRs build, test and scan only. A push to main (or a manual dispatch from main)
+# additionally pushes the image and commits the new tag to deploy/services/<svc>/values.yaml;
+# Argo CD then rolls it out. CI never talks to the cluster.
+on:
+  pull_request:
+    paths: ['services/**', 'charts/**']
+  push:
+    branches: [main]
+    # deploy/** is deliberately NOT listed: the promote commit touches only deploy/services/*,
+    # so it cannot re-trigger this workflow (and GITHUB_TOKEN commits never trigger one anyway).
+    paths: ['services/**', 'charts/**']
+  # The first image build after `terraform apply` has to happen without a code change
+  # (the registry is empty and Argo CD is waiting on the tag). Dispatch builds every service.
+  workflow_dispatch:
+
+# Least privilege by default; jobs that need more say so themselves.
+permissions:
+  contents: read
+
+env:
+  # Until the owner sets the GCP_* repo variables, PRs still need a valid image name to build
+  # and scan, so fall back to placeholders. Pushing is gated on main, where the variables must exist.
+  REGISTRY: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev
+  # Same version as the Makefile `lint` target, so a lint result is the same locally and in CI.
+  GOLANGCI_LINT_VERSION: v2.15.0
+
+jobs:
+  # Decide which services need a build. A new services/<name>/ with a Dockerfile is picked up
+  # automatically: that is the self-service story, no workflow edit needed.
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      services: ${{ steps.matrix.outputs.services }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the base commit must be present to diff against it
+          persist-credentials: false
+      - id: matrix
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          # Every directory that has a Dockerfile is a service.
+          all=$(find services -mindepth 2 -maxdepth 2 -name Dockerfile -printf '%h\n' | sed 's|^services/||' | sort)
+
+          case "$EVENT" in
+            pull_request) base=$PR_BASE ;;
+            push)         base=$PUSH_BEFORE ;;
+            *)            base= ;; # workflow_dispatch: build everything
+          esac
+
+          # Build everything when there is no usable base: dispatch, a new branch (all-zero
+          # `before`), or a force-push whose old commit is gone.
+          if [ -z "$base" ] || [ "$base" = 0000000000000000000000000000000000000000 ] \
+             || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            selected=$all
+          else
+            # Changed top-level dirs under services/, intersected with dirs that still have a
+            # Dockerfile (so a deleted service is not built). comm needs both lists sorted.
+            changed=$(git diff --name-only "$base" HEAD -- services | cut -d/ -f2 | sort -u)
+            selected=$(comm -12 <(echo "$changed") <(echo "$all"))
+          fi
+
+          # Names -> JSON array; an empty list becomes [], which makes build skip.
+          json=$(printf '%s' "$selected" | jq -Rsc 'split("\n") | map(select(length > 0))')
+          echo "services=$json" | tee -a "$GITHUB_OUTPUT"
+
+  build:
+    needs: detect
+    if: needs.detect.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    # id-token is needed only by the WIF login step, which runs on main only. Job-level
+    # permissions cannot be conditional; fork PRs get a read-only token regardless.
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false # one broken service must not hide the result of the others
+      matrix:
+        svc: ${{ fromJson(needs.detect.outputs.services) }}
+    defaults:
+      run:
+        working-directory: services/${{ matrix.svc }}
+    env:
+      IMAGE: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT || 'unset' }}/mini-mos/${{ matrix.svc }}:${{ github.sha }}
+      # Only main may push images; PRs and dispatches from other branches just verify.
+      PUSH: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Each service is its own Go module, so every Go step runs inside its directory.
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: services/${{ matrix.svc }}/go.mod
+          cache-dependency-path: services/${{ matrix.svc }}/go.sum
+
+      - run: go vet ./...
+
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: services/${{ matrix.svc }}
+
+      # -race: the relay and consumer are concurrent, so data races are a real risk.
+      - run: go test -race ./...
+
+      # Integration tests start a throwaway Postgres through testcontainers; ubuntu runners have Docker.
+      # This run repeats the unit tests, but it is the one that proves the DB paths.
+      - run: go test -race -tags integration ./...
+
+      - name: Build image
+        run: docker build -t "$IMAGE" .
+
+      # Gate on CRITICAL only: lower severities in a base image would block every PR for
+      # things the service owner mostly cannot fix. ignore-unfixed: a CVE with no patch
+      # available cannot be acted on, so failing the build on it is just noise.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          version: v0.76.2
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      # Keyless auth: GitHub's OIDC token is exchanged for a short-lived credential of the
+      # pusher service account. No JSON key is stored anywhere.
+      - name: Authenticate to Google Cloud
+        if: env.PUSH == 'true'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.PUSHER_SA }}
+
+      - name: Push image
+        if: env.PUSH == 'true'
+        run: |
+          gcloud auth configure-docker "$REGISTRY" --quiet
+          docker push "$IMAGE"
+
+  chart:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: v4.3.2
+      # The chart requires name/image values (it fails the render without them), so lint and
+      # render it once per service. The loop means a new deploy/services/<svc>/ is covered
+      # without touching this file.
+      - name: Lint and render every service
+        run: |
+          set -euo pipefail
+          for values in deploy/services/*/values.yaml; do
+            echo "::group::$values"
+            helm lint charts/service -f "$values"
+            helm template charts/service -f "$values" > /dev/null
+            echo "::endgroup::"
+          done
+
+  # Runs the whole stack from source, so it needs no build artifacts: `needs: build` just
+  # means "only after the per-service checks passed". If build was skipped (chart-only change)
+  # the stack cannot have changed, so this is skipped too.
+  e2e:
+    needs: build
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: tests/e2e/go.mod
+          cache: false # the e2e module has no go.sum (stdlib only), so there is nothing to cache
+      # `make e2e` = compose up --build --wait, poll /readyz, then the e2e suite with
+      # REDELIVER_CMD pointing at scripts/redeliver.sh compose. One definition for dev and CI.
+      - run: make e2e
+      - name: Collect compose logs
+        if: failure()
+        run: docker compose logs --no-color > compose.log
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: compose-logs
+          path: compose.log
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  # Commits the new image tag so Argo CD deploys it. Main only; a dispatch from another branch
+  # must not write to main.
+  promote:
+    needs: [detect, build]
+    # build is fail-fast: false, so some legs can fail while others pass. Promote only when
+    # every leg succeeded; a half-promoted push is harder to reason about than a red build.
+    if: >-
+      github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the only job allowed to push to the repo
+    # One promote at a time so two pushes cannot race on the same files. Never cancel a running
+    # one: a half-finished commit/push is worse than waiting. (GitHub keeps only one *pending*
+    # run per group, so a third overlapping promote replaces the second; re-run via dispatch
+    # if a tag is ever missed.)
+    concurrency:
+      group: promote
+      cancel-in-progress: false
+    env:
+      SERVICES: ${{ needs.detect.outputs.services }} # JSON list; same list build used
+      SHA: ${{ github.sha }}
+      YQ_VERSION: v4.54.3
+      # sha256 of yq_linux_amd64 for the version above, so the download is verified.
+      YQ_SHA256: 129534601871538efe0ba4c5e62a34fb1d5f469bcb975c4fddeb467d82974973
+    steps:
+      # Check out the branch tip, not github.sha: other promotes may already have landed.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          # Default persist-credentials is kept: the push below needs the GITHUB_TOKEN.
+      - name: Install yq
+        run: |
+          curl -sfL -o yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          echo "${YQ_SHA256}  yq" | sha256sum -c -
+          sudo install -m 0755 yq /usr/local/bin/yq
+      - name: Commit image tags
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # pull --rebase first, so a push that landed since checkout is not a conflict;
+          # if another promote still wins the race, try once more.
+          push() { git pull --rebase origin main && git push origin HEAD:main; }
+
+          for svc in $(jq -r '.[]' <<<"$SERVICES"); do
+            file=deploy/services/$svc/values.yaml
+            yq -i ".image.tag = \"$SHA\"" "$file" # fails loudly if the service has no values file
+            if git diff --quiet -- "$file"; then
+              echo "$svc already at $SHA"
+              continue
+            fi
+            git add "$file"
+            git commit -m "chore(deploy): $svc → ${SHA:0:7}"
+          done
+
+          # Nothing committed (e.g. a re-run): nothing to push.
+          if [ "$(git rev-list --count origin/main..HEAD)" -gt 0 ]; then
+            push || push
+          fi

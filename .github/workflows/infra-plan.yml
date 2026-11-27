@@ -1,0 +1,129 @@
+name: infra-plan
+
+# Infra changes are checked on PRs only. Nothing here ever applies: the provisioning tier
+# of the Terratest suite is billable and needs apply rights, so it runs locally by hand
+# (decision in docs/decisions.md: "Terratest apply tier runs locally only").
+on:
+  pull_request:
+    paths: ['infra/**', '.github/workflows/infra-plan.yml']
+
+permissions:
+  contents: read
+
+env:
+  # Same version as the one used locally, so `fmt` and `validate` agree with CI.
+  TERRAFORM_VERSION: 1.17.2
+
+jobs:
+  # Terratest static tier: terraform fmt -check + init/validate (-backend=false) on every
+  # module, fixture and envs/dev. Free and needs no cloud credentials, so it is the gate.
+  static:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          # The wrapper swaps the binary for a script that captures output; Terratest
+          # parses terraform's own stdout, so use the real binary.
+          terraform_wrapper: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: infra/test/go.mod
+          cache-dependency-path: infra/test/go.sum
+      - name: Terratest static tier
+        working-directory: infra/test
+        run: go test -v -timeout 10m ./...
+
+  # Advisory: a real `terraform plan` of envs/dev plus the Terratest plan tier, with the
+  # result posted on the PR. It uses the read-only plan service account (PLAN_SA) over WIF.
+  # That SA may be unable to read some IAM policies during refresh, so a failure here can be a
+  # permissions gap rather than a bad change; hence continue-on-error: it never blocks a merge.
+  plan:
+    needs: static
+    # Skipped until the owner has run `terraform apply` once and set PLAN_SA. Fork PRs get no
+    # OIDC token (and must not get cloud access), so they are skipped too.
+    if: vars.PLAN_SA != '' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write # WIF: exchange the GitHub OIDC token for PLAN_SA credentials
+      pull-requests: write # to post the plan comment
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_VAR_project_id: ${{ vars.GCP_PROJECT }}
+      TF_VAR_github_repo: ${{ github.repository }}
+      TF_VAR_master_authorized_cidrs: ${{ vars.MASTER_AUTHORIZED_CIDRS }} # JSON list, e.g. ["1.2.3.4/32"]
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      # For the Terratest plan fixture, which reads the project from the environment.
+      GOOGLE_PROJECT: ${{ vars.GCP_PROJECT }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.PLAN_SA }}
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: infra/test/go.mod
+          cache-dependency-path: infra/test/go.sum
+
+      - name: terraform init
+        working-directory: infra/envs/dev
+        run: terraform init -input=false -backend-config="bucket=$TF_STATE_BUCKET"
+
+      - name: terraform plan
+        id: plan
+        working-directory: infra/envs/dev
+        run: |
+          set -o pipefail # keep terraform's exit code through the tee
+          terraform plan -no-color -input=false | tee "$RUNNER_TEMP/plan.txt"
+
+      # Free tier: plans the gke-stack fixture and asserts on the planned resources.
+      - name: Terratest plan tier
+        working-directory: infra/test
+        run: go test -v -timeout 15m -tags plan -run TestGKEStackPlan ./...
+
+      # Runs even when the plan failed, so the PR shows why. Keep only the headline lines
+      # (resource changes, the "Plan:" total, errors); GitHub comments cap at 65536 chars.
+      - name: Summarise plan
+        if: ${{ !cancelled() && steps.plan.conclusion != 'skipped' }}
+        run: |
+          out=$RUNNER_TEMP/plan.txt
+          { grep -E '^(Plan:|No changes|Error:)|^  # ' "$out" || tail -n 30 "$out"; } | head -n 80 > "$RUNNER_TEMP/summary.txt" || true
+          [ -s "$RUNNER_TEMP/summary.txt" ] || echo "plan produced no output (see the job log)" > "$RUNNER_TEMP/summary.txt"
+
+      - name: Comment on the PR
+        if: ${{ !cancelled() && steps.plan.conclusion != 'skipped' }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- infra-plan -->';
+            const summary = fs.readFileSync(`${process.env.RUNNER_TEMP}/summary.txt`, 'utf8');
+            const body = `${marker}\n### terraform plan (envs/dev): ${process.env.PLAN_OUTCOME}\n` +
+              '```\n' + summary + '\n```\n' +
+              `Advisory only. [Full log](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            // Update our previous comment instead of adding one per push.
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const prev = comments.find(c => c.body && c.body.startsWith(marker));
+            if (prev) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: prev.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
