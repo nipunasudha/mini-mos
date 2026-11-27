@@ -92,7 +92,9 @@ jobs:
     env:
       IMAGE: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT || 'unset' }}/mini-mos/${{ matrix.svc }}:${{ github.sha }}
       # Only main may push images; PRs and dispatches from other branches just verify.
-      PUSH: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+      # Push only from main, and only once Terraform has created the registry and the repo
+      # variables exist. Before that, main builds still lint, test and scan.
+      PUSH: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.WIF_PROVIDER != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -209,9 +211,10 @@ jobs:
     needs: [detect, build]
     # build is fail-fast: false, so some legs can fail while others pass. Promote only when
     # every leg succeeded; a half-promoted push is harder to reason about than a red build.
+    # Same WIF_PROVIDER gate as PUSH: never write a tag for an image that was not pushed.
     if: >-
       github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-      && needs.build.result == 'success'
+      && needs.build.result == 'success' && vars.WIF_PROVIDER != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write # the only job allowed to push to the repo
