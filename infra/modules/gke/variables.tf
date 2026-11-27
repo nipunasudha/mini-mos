@@ -36,7 +36,7 @@ variable "master_authorized_cidrs" {
 variable "node_count" {
   description = "Initial size of the spot pool. The autoscaler then keeps it between 2 and 4."
   type        = number
-  default     = 3
+  default     = 2 # the demo needs ~6-8 GB of RAM; 2 x e2-standard-4 has 32 GB, and the autoscaler adds more if pods don't fit
 }
 
 variable "machine_type" {

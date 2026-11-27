@@ -97,9 +97,10 @@ resource "google_container_node_pool" "spot" {
     spot         = true # cheap, and can be reclaimed at any time (fine for a demo)
 
     # GKE's default boot disk is 100 GB pd-balanced, which counts against the regional
-    # SSD quota (250 GB on a fresh project: 3 nodes don't fit). 50 GB pd-standard is
-    # plenty for images, costs less than half, and uses the much larger HDD quota.
-    disk_size_gb    = 50
+    # SSD quota (250 GB on a fresh project: 3 nodes don't fit). A node only holds the OS
+    # and container images (~10-15 GB), so 20 GB pd-standard is enough and uses the much
+    # larger HDD quota. Raise it if nodes report DiskPressure.
+    disk_size_gb    = 20
     disk_type       = "pd-standard"
     service_account = google_service_account.nodes.email
 
