@@ -33,3 +33,17 @@ e2e: compose-up
 
 demo:
 	scripts/demo.sh
+
+# Terratest tiers (Section 10 of the spec). -timeout matters: Go's 10 minute
+# default would kill an apply halfway and leave billable resources behind.
+# Plan and live need GOOGLE_PROJECT and GCP credentials; live creates a cluster.
+.PHONY: infra-test-static infra-test-plan infra-test-live
+
+infra-test-static:
+	cd infra/test && go test -v -count=1 -timeout 10m ./...
+
+infra-test-plan:
+	cd infra/test && go test -v -count=1 -timeout 15m -tags plan -run TestGKEStackPlan ./...
+
+infra-test-live:
+	cd infra/test && go test -v -count=1 -timeout 60m -tags provisioning -run TestGKEStackProvisioning ./...

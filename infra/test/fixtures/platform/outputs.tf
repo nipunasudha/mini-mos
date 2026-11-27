@@ -1,0 +1,1 @@
+../gke-stack/outputs.tf

@@ -1,0 +1,2 @@
+# Terratest stage data (saved options, so SKIP_setup / SKIP_teardown can resume)
+.test-data/
