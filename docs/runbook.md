@@ -39,7 +39,7 @@ cd infra/envs/dev
 terraform apply
 ```
 
-Empty project to Argo CD running: **to be measured** (spec estimate: ~15 minutes). Argo CD then installs everything else from `deploy/platform` on `main`; until that folder exists on `main`, the root app shows an error. Time until every app is Synced/Healthy: **to be measured**.
+Empty project to Argo CD running: **~16 min** measured on 2026-11-27 (cluster ~9 min, node pool + Argo CD ~7.5 min; spec estimate ~15). Argo CD then installs everything else from `deploy/platform` on `main`. Time until every app is Synced/Healthy: not cleanly measured yet (two fixes landed mid-sync on the first run); measure on the next clean apply. Seen on a fresh project: GKE's default 100 GB SSD boot disks hit the 250 GB regional `SSD_TOTAL_GB` quota, which is why nodes now use 20 GB `pd-standard`.
 
 ```sh
 eval "$(terraform output -raw get_credentials_command)"   # kubectl now points at the cluster
@@ -94,7 +94,7 @@ make infra-down     # = terraform destroy -target=module.network in infra/envs/d
 
 `infra-down` destroys the network and everything built on it: NAT, the cluster, its nodes and Argo CD. That's everything that costs money. It keeps the registry, the WIF pool and the CI service accounts, which are free. A deleted WIF pool ID is reserved for 30 days, so destroying it daily would break the next apply. `make infra-up` brings the cluster back. To remove everything for good (end of the project), run `terraform destroy` without `-target`.
 
-Destroy time: **to be measured**. After it, only the state bucket and the Artifact Registry images should remain: check `gcloud container clusters list`, `gcloud compute disks list`, `gcloud compute networks list`.
+Destroy time, measured 2026-11-27: pre-destroy step **54s**, `make infra-down` **~10 min** (Argo CD 1m, node pool 3m10s, cluster 4m40s, network ~1m). After it, only the state bucket and the Artifact Registry images should remain: check `gcloud container clusters list`, `gcloud compute disks list`, `gcloud compute networks list`.
 
 ## 6. Terratest
 
@@ -102,9 +102,9 @@ All tests live in `infra/test/`. Each tier is a separate command; build tags sto
 
 | Tier | Command | Needs | Cost / time |
 | --- | --- | --- | --- |
-| Static | `make infra-test-static` | nothing | free, ~20s (to be measured in CI) |
-| Plan | `GOOGLE_PROJECT=$PROJECT make infra-test-plan` | ADC | free, ~1 min (to be measured) |
-| Live | `GOOGLE_PROJECT=$PROJECT make infra-test-live` | ADC with apply rights | one cluster, 20-25 min (to be measured) |
+| Static | `make infra-test-static` | nothing | free, ~18s locally |
+| Plan | `GOOGLE_PROJECT=$PROJECT make infra-test-plan` | ADC | free, ~10s |
+| Live | `GOOGLE_PROJECT=$PROJECT make infra-test-live` | ADC with apply rights | one cluster, 19m46s measured (apply ~10 min, checks ~1 min, destroy ~8 min) |
 | Full stack | `cd infra/test && go test -v -count=1 -timeout 90m -tags provisioning -run TestPlatformBootstrap ./...` | same | one cluster, 35-45 min (to be measured) |
 
 - Static: `terraform init -backend=false` + `validate` on every module, fixture and `envs/dev`, plus `terraform fmt -check -recursive`. CI runs it on every infra PR.
