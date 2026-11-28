@@ -11,8 +11,10 @@ spec:
           # The threshold of 20 is deliberately low, for the demo: stopping bill-scheduler
           # while demo-traffic.sh runs pushes lag past it within about a minute. A real
           # service would alert on lag growth or time-behind, not a small absolute count.
+          # `>= 0` drops partitions with no committed offset yet: the exporter reports
+          # those as -1 (a marker, not a lag), which would pull the sum down.
           # Unit-tested in tests/consumer-lag.test.yaml.
-          expr: sum by (consumergroup) (kafka_consumergroup_lag{consumergroup="bill-scheduler"}) > 20
+          expr: sum by (consumergroup) (kafka_consumergroup_lag{consumergroup="bill-scheduler"} >= 0) > 20
           # One minute filters out the short lag spikes of a normal rolling restart.
           for: 1m
           labels:

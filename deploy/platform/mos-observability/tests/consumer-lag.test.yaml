@@ -43,3 +43,22 @@ tests:
       - eval_time: 2m
         alertname: MiniMosConsumerLagHigh
         exp_alerts: []
+  - name: -1 markers on never-committed partitions do not hide real lag
+    interval: 15s
+    input_series:
+      - series: 'kafka_consumergroup_lag{consumergroup="bill-scheduler", topic="deposits.allocated", partition="0"}'
+        values: '-1x8'
+      - series: 'kafka_consumergroup_lag{consumergroup="bill-scheduler", topic="deposits.allocated", partition="1"}'
+        values: '-1x8'
+      - series: 'kafka_consumergroup_lag{consumergroup="bill-scheduler", topic="deposits.allocated", partition="2"}'
+        values: '21x8'   # summed with the markers this would be 19: below the threshold
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MiniMosConsumerLagHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              consumergroup: bill-scheduler
+            exp_annotations:
+              summary: "Consumer group bill-scheduler is falling behind"
+              description: "bill-scheduler has 21 unprocessed messages (threshold 20) for over a minute. Is bill-scheduler running?"

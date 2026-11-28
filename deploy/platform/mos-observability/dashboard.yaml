@@ -67,7 +67,7 @@ data:
             "overrides": []
           },
           "targets": [
-            {"refId": "A", "legendFormat": "{{consumergroup}}", "expr": "sum by (consumergroup) (kafka_consumergroup_lag{consumergroup=\"bill-scheduler\"})"}
+            {"refId": "A", "legendFormat": "{{consumergroup}}", "expr": "sum by (consumergroup) (kafka_consumergroup_lag{consumergroup=\"bill-scheduler\"} >= 0)"}
           ]
         },
         {
