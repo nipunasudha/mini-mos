@@ -2,7 +2,7 @@ SERVICES := ledger-api bill-scheduler
 # Pinned: lint results should not change because a new linter release came out.
 LINT_IMAGE := golangci/golangci-lint:v2.15.0
 
-.PHONY: compose-up compose-down test test-integration lint e2e demo infra-up infra-down
+.PHONY: compose-up compose-down test test-integration lint e2e demo traffic infra-up infra-down
 
 compose-up:
 	docker compose up -d --build --wait
@@ -33,6 +33,9 @@ e2e: compose-up
 
 demo:
 	scripts/demo.sh
+
+traffic:
+	scripts/demo-traffic.sh
 
 # Terratest tiers (Section 10 of the spec). -timeout matters: Go's 10 minute
 # default would kill an apply halfway and leave billable resources behind.

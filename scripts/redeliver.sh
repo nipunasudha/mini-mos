@@ -26,35 +26,12 @@ compose)
   ;;
 k8s)
   TIMEOUT=90 # pods have to be scheduled, start and join the group again
-  NS=mos
-  APP=bill-scheduler # Argo CD Application, Deployment and pod label all use this name
-  replicas=
+  source scripts/scheduler.sh # scheduler_stop / scheduler_start, shared with the manual demo
 
   kafka_groups() {
     kubectl -n "$NS" exec mos-kafka-dual-role-0 -c kafka -- \
       /opt/kafka/bin/kafka-consumer-groups.sh \
       --bootstrap-server localhost:9092 --group "$GROUP" "$@"
-  }
-  scheduler_stop() {
-    # Self-heal would put the replicas back within seconds, so pause auto-sync
-    # on this one Application first (the ApplicationSet ignores syncPolicy drift).
-    kubectl -n argocd patch application "$APP" --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
-    replicas=$(kubectl -n "$NS" get deploy "$APP" -o jsonpath='{.spec.replicas}')
-    [ "${replicas:-0}" -gt 0 ] || replicas=2 # already 0 (a killed earlier run): use the chart default
-    kubectl -n "$NS" scale deploy/"$APP" --replicas=0
-    # Scaling returns at once; the pods must be gone so they have left the group.
-    for _ in $(seq 60); do
-      [ -z "$(kubectl -n "$NS" get pods -l app.kubernetes.io/name="$APP" -o name)" ] && return 0
-      sleep 1
-    done
-    echo "$APP pods did not terminate in 60s" >&2
-    return 1
-  }
-  scheduler_start() {
-    # Scale first, then hand control back to Argo CD (same policy the ApplicationSet sets).
-    kubectl -n "$NS" scale deploy/"$APP" --replicas="${replicas:-2}"
-    kubectl -n argocd patch application "$APP" --type merge \
-      -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
   }
   ;;
 *)
