@@ -23,6 +23,10 @@ esac
 trap 'printf "\ntotal: %d deposits, %d non-2xx\n" "$sent" "$failed"; exit 0' INT TERM
 
 while :; do
+  # Start the 2s timer before the request, so the request time falls inside it and
+  # the rate stays one per 2s. In the background, so Ctrl-C's trap fires at once.
+  sleep 2 &
+  tick=$!
   sent=$((sent + 1))
   # A refused connection gives "000" and a non-zero curl exit; keep going, steady load is the point.
   code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/v1/clients/$CLIENT/deposits" \
@@ -30,7 +34,5 @@ while :; do
     -d "{\"amount_cents\":$AMOUNT,\"source\":\"employer-payroll\"}" 2>/dev/null) || true
   case "$code" in 2??) ;; *) failed=$((failed + 1)) ;; esac
   printf '%s %s %s\n' "$(date +%T)" "$code" "$AMOUNT"
-  # sleep in the background so the trap fires at once instead of after the sleep.
-  sleep 2 &
-  wait $! || true
+  wait "$tick" || true
 done
