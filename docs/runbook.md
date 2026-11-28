@@ -39,7 +39,7 @@ cd infra/envs/dev
 terraform apply
 ```
 
-Empty project to Argo CD running: **~16 min** measured on 2026-11-27 (cluster ~9 min, node pool + Argo CD ~7.5 min; spec estimate ~15). Argo CD then installs everything else from `deploy/platform` on `main`. Time until every app is Synced/Healthy: not cleanly measured yet (two fixes landed mid-sync on the first run); measure on the next clean apply. Seen on a fresh project: GKE's default 100 GB SSD boot disks hit the 250 GB regional `SSD_TOTAL_GB` quota, which is why nodes now use 20 GB `pd-standard`.
+Empty project to every Argo CD app Synced/Healthy: **13 min**, measured 2026-11-28. That breaks down as network ~1 min, cluster 3m45s, node pool 1m49s, Argo CD 2m11s, then Argo installs the platform in 4 min.
 
 ```sh
 eval "$(terraform output -raw get_credentials_command)"   # kubectl now points at the cluster
@@ -76,6 +76,8 @@ Open https://localhost:8080 (accept the self-signed certificate).
 make infra-pause    # terraform apply -var paused=true: deletes the node pool only
 make infra-up       # brings the nodes back; Argo CD and every app restart by themselves
 ```
+
+Measured 2026-11-28: pause takes **~4 min** (the node pool delete). Unpause takes **~10 min** until every pod is Ready: 3 min for the node pool, then 7 min for pods to pull their images and start in dependency order. That's slower than hoped, but there's nothing to rebuild and no state is lost.
 
 Pausing keeps the cluster, Argo CD, all the apps and the Postgres volume, and removes only the nodes. What it costs while paused:
 - The zonal control plane is covered by the GKE free tier (one zonal or Autopilot cluster per billing account).
