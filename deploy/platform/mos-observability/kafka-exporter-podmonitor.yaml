@@ -1,0 +1,26 @@
+# Strimzi runs a kafka-exporter pod (kafkaExporter: {} in kafka.yaml) but, unlike the
+# Prometheus Operator examples, creates no ServiceMonitor or PodMonitor for it, so
+# kafka_consumergroup_lag would never reach Prometheus. This PodMonitor closes that gap.
+# Why a PodMonitor: the exporter has no Service, only a pod with a named container port.
+# Pod labels and port name come from Strimzi 1.3.1's KafkaExporter model:
+#   strimzi.io/kind=Kafka, strimzi.io/name=<cluster>-kafka-exporter, port tcp-prometheus (9404).
+# NetworkPolicy: Strimzi creates one for the exporter that allows 9404 from everywhere
+# (KafkaExporter.generateNetworkPolicy), so Prometheus in `monitoring` needs no extra rule.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: mos-kafka-exporter
+  namespace: mos
+spec:
+  selector:
+    matchLabels:
+      strimzi.io/kind: Kafka
+      # Only the exporter: the broker pod carries the same kind label but no metrics port.
+      strimzi.io/name: mos-kafka-kafka-exporter
+  namespaceSelector:
+    matchNames:
+      - mos
+  podMetricsEndpoints:
+    - port: tcp-prometheus
+      path: /metrics
+      interval: 15s

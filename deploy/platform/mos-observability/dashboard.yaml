@@ -1,0 +1,84 @@
+# Grafana loads this through the chart's dashboards sidecar (kube-prometheus-stack 94.1.0):
+# it watches ConfigMaps labelled grafana_dashboard="1" in ALL namespaces (sidecar.dashboards
+# searchNamespace: ALL) and the chart's Prometheus datasource has uid `prometheus`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mini-mos-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  mini-mos.json: |
+    {
+      "title": "mini-MOS",
+      "uid": "mini-mos",
+      "refresh": "10s",
+      "time": {"from": "now-15m", "to": "now"},
+      "schemaVersion": 39,
+      "panels": [
+        {
+          "title": "Request rate by route",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "targets": [
+            {"refId": "A", "legendFormat": "{{route}}", "expr": "sum by (route) (rate(http_requests_total{namespace=\"mos\"}[1m]))"}
+          ]
+        },
+        {
+          "title": "p95 latency by route",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+          "targets": [
+            {"refId": "A", "legendFormat": "{{route}}", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket{namespace=\"mos\"}[5m])))"}
+          ]
+        },
+        {
+          "title": "Payments by result",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "targets": [
+            {"refId": "A", "legendFormat": "{{result}}", "expr": "sum by (result) (increase(ledger_payments_total[5m]))"}
+          ]
+        },
+        {
+          "title": "Consumer lag (bill-scheduler)",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {"thresholdsStyle": {"mode": "line"}},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "red", "value": 20}
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {"refId": "A", "legendFormat": "{{consumergroup}}", "expr": "sum by (consumergroup) (kafka_consumergroup_lag{consumergroup=\"bill-scheduler\"})"}
+          ]
+        },
+        {
+          "title": "Outbox pending",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "targets": [
+            {"refId": "A", "legendFormat": "pending", "expr": "sum(ledger_outbox_pending)"}
+          ]
+        }
+      ]
+    }

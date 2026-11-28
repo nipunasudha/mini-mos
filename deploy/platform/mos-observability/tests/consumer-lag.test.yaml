@@ -1,0 +1,45 @@
+# promtool unit test for MiniMosConsumerLagHigh. Not a Kubernetes object: the Application
+# excludes tests/* so Argo never applies it. promtool wants a plain rule file, not a
+# PrometheusRule, so extract the group next to a copy of this test and run it there:
+#   d=$(mktemp -d); yq e '.spec' prometheusrule.yaml > $d/rules.yaml
+#   cp tests/consumer-lag.test.yaml $d/; promtool test rules $d/consumer-lag.test.yaml
+rule_files:
+  - rules.yaml   # relative to this file
+evaluation_interval: 15s
+tests:
+  - name: lag 25 for 2m fires
+    interval: 15s
+    input_series:
+      - series: 'kafka_consumergroup_lag{consumergroup="bill-scheduler", topic="deposits.allocated", partition="0"}'
+        values: '25x8'   # 25 for 2m (8 samples of 15s)
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MiniMosConsumerLagHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              consumergroup: bill-scheduler
+            exp_annotations:
+              summary: "Consumer group bill-scheduler is falling behind"
+              description: "bill-scheduler has 25 unprocessed messages (threshold 20) for over a minute. Is bill-scheduler running?"
+  - name: lag 25 for only 30s does not fire (still pending, `for` is 1m)
+    interval: 15s
+    input_series:
+      - series: 'kafka_consumergroup_lag{consumergroup="bill-scheduler", topic="deposits.allocated", partition="0"}'
+        values: '25x2 stale'   # 25 for 30s, then the series goes stale (a gap `_` would keep the last value for 5m)
+    alert_rule_test:
+      - eval_time: 30s   # pending, not yet firing
+        alertname: MiniMosConsumerLagHigh
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: MiniMosConsumerLagHigh
+        exp_alerts: []
+  - name: lag 10 stays below threshold
+    interval: 15s
+    input_series:
+      - series: 'kafka_consumergroup_lag{consumergroup="bill-scheduler", topic="deposits.allocated", partition="0"}'
+        values: '10x8'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: MiniMosConsumerLagHigh
+        exp_alerts: []

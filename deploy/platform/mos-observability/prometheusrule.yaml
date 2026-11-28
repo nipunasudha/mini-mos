@@ -1,0 +1,22 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mini-mos
+  namespace: monitoring
+spec:
+  groups:
+    - name: mini-mos
+      rules:
+        - alert: MiniMosConsumerLagHigh
+          # The threshold of 20 is deliberately low, for the demo: stopping bill-scheduler
+          # while demo-traffic.sh runs pushes lag past it within about a minute. A real
+          # service would alert on lag growth or time-behind, not a small absolute count.
+          # Unit-tested in tests/consumer-lag.test.yaml.
+          expr: sum by (consumergroup) (kafka_consumergroup_lag{consumergroup="bill-scheduler"}) > 20
+          # One minute filters out the short lag spikes of a normal rolling restart.
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Consumer group {{ $labels.consumergroup }} is falling behind"
+            description: "{{ $labels.consumergroup }} has {{ $value }} unprocessed messages (threshold 20) for over a minute. Is bill-scheduler running?"

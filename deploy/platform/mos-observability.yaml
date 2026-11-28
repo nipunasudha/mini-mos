@@ -1,0 +1,35 @@
+# Dashboard, alert rule and Kafka-exporter scrape config for mini-MOS.
+# Wave -1: after the kube-prometheus-stack CRDs (-3) and the Kafka cluster (-2), before the
+# services (0), so the dashboard and PodMonitor exist by the time traffic starts.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mos-observability
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nipunasudha/mini-mos.git
+    targetRevision: main
+    path: deploy/platform/mos-observability
+    directory:
+      # tests/ holds the promtool unit test, which is not a Kubernetes object. Argo reads
+      # directories non-recursively by default; this makes the exclusion explicit so it
+      # survives anyone turning recurse on.
+      exclude: "tests/*"
+  destination:
+    server: https://kubernetes.default.svc
+    # Fallback only: every manifest sets its own namespace (monitoring, or mos for the PodMonitor).
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Belt and braces: the monitoring CRDs arrive from wave -3, but if Argo's dry-run ever
+      # runs before they are registered, don't fail the sync on "unknown kind".
+      - SkipDryRunOnMissingResource=true
