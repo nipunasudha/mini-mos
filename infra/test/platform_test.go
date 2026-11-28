@@ -24,11 +24,10 @@ import (
 
 // Applications that must exist: the root, the children from deploy/platform,
 // and the apps the mos-services ApplicationSet generates (one per service).
-// mos-observability joins this list in Milestone 3.
 var requiredApps = []string{
 	"root",
 	"strimzi-operator", "cnpg-operator", "kube-prometheus-stack",
-	"mos-kafka", "mos-postgres",
+	"mos-kafka", "mos-postgres", "mos-observability",
 	"ledger-api", "bill-scheduler",
 }
 
