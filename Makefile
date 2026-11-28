@@ -2,7 +2,7 @@ SERVICES := ledger-api bill-scheduler
 # Pinned: lint results should not change because a new linter release came out.
 LINT_IMAGE := golangci/golangci-lint:v2.15.0
 
-.PHONY: compose-up compose-down test test-integration lint e2e demo traffic infra-up infra-down
+.PHONY: compose-up compose-down test test-integration lint e2e demo traffic infra-up infra-pause infra-down
 
 compose-up:
 	docker compose up -d --build --wait
@@ -60,6 +60,10 @@ DEV := infra/envs/dev
 
 infra-up:
 	cd $(DEV) && terraform apply
+
+# Pause between demos: deletes the node pool only (~3 min); infra-up brings it back.
+infra-pause:
+	cd $(DEV) && terraform apply -var paused=true
 
 infra-down:
 	cd $(DEV) && terraform destroy -target=module.network

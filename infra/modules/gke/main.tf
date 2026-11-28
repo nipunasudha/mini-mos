@@ -30,13 +30,10 @@ resource "google_container_cluster" "this" {
   network    = var.network_id
   subnetwork = var.subnet_id
 
-  # The default pool cannot be configured (no spot, no custom SA), so create the
-  # cluster with a throwaway one-node pool and delete it. The real pool is below.
-  # The provider marks this deprecated: GKE 1.36.4+ can skip the default pool if
-  # both lines are simply omitted. Kept because it works on every GKE version
-  # (the REGULAR channel may not be on 1.36.4 yet); switch when it is.
-  remove_default_node_pool = true
-  initial_node_count       = 1
+  # No default node pool: on GKE 1.36.4+ leaving out initial_node_count and
+  # remove_default_node_pool creates the cluster without one. (Older versions
+  # needed a throwaway pool created and then deleted, which cost minutes.)
+  # The only pool is the spot pool below.
 
   # The demo cluster is destroyed every day.
   deletion_protection = false
@@ -79,6 +76,11 @@ resource "google_container_cluster" "this" {
 }
 
 resource "google_container_node_pool" "spot" {
+  # Paused: no nodes, so nothing is billed except what the GKE free tier covers
+  # (one zonal control plane) and the Postgres disk. Unpausing recreates the pool;
+  # everything in the cluster (Argo CD, the apps, the Postgres volume) is still there.
+  count = var.paused ? 0 : 1
+
   project  = var.project_id
   name     = "spot"
   location = var.location

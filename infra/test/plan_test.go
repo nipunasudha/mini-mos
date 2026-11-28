@@ -42,17 +42,13 @@ func TestGKEStackPlan(t *testing.T) {
 	plan := terraform.InitAndPlanAndShowWithStructNoLogTempPlanFileContext(t, t.Context(), opts)
 
 	cluster := planned(t, plan, "module.gke.google_container_cluster.this")
-	pool := planned(t, plan, "module.gke.google_container_node_pool.spot")
+	pool := planned(t, plan, "module.gke.google_container_node_pool.spot[0]")
 
 	t.Run("spot pool autoscales 2 to 4", func(t *testing.T) {
 		require.Equal(t, true, block(t, pool, "node_config")["spot"])
 		scale := block(t, pool, "autoscaling")
 		require.EqualValues(t, 2, scale["min_node_count"])
 		require.EqualValues(t, 4, scale["max_node_count"])
-	})
-
-	t.Run("default node pool is removed", func(t *testing.T) {
-		require.Equal(t, true, cluster["remove_default_node_pool"])
 	})
 
 	t.Run("private nodes with restricted public endpoint", func(t *testing.T) {

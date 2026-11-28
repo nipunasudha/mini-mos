@@ -39,6 +39,12 @@ variable "node_count" {
   default     = 2 # the demo needs ~6-8 GB of RAM; 2 x e2-standard-4 has 32 GB, and the autoscaler adds more if pods don't fit
 }
 
+variable "paused" {
+  description = "true removes the node pool but keeps the cluster: a cheap pause between demos."
+  type        = bool
+  default     = false
+}
+
 variable "machine_type" {
   type    = string
   default = "e2-standard-4"

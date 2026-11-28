@@ -1,13 +1,14 @@
 # Prometheus Operator + Prometheus + Grafana + node-exporter + kube-state-metrics.
-# Wave -3 so the ServiceMonitor/PodMonitor/PrometheusRule CRDs exist before anything
-# (M3's mos-observability, the services' charts) creates those objects.
+# Wave -2, alongside Kafka and Postgres: they don't need monitoring, so they install in
+# parallel with it instead of waiting for the heaviest install. Its CRDs still exist before
+# anything that uses them: mos-observability (-1) and the services' ServiceMonitors (0).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: kube-prometheus-stack
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "-3"
+    argocd.argoproj.io/sync-wave: "-2"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:

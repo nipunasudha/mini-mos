@@ -28,3 +28,9 @@ variable "state_bucket" {
   description = "The Terraform state bucket (same one passed to init). gha-tf-plan gets read access to it."
   type        = string
 }
+
+variable "paused" {
+  description = "true removes the nodes but keeps the cluster (make infra-pause / infra-up)."
+  type        = bool
+  default     = false
+}

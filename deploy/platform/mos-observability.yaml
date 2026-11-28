@@ -1,5 +1,5 @@
 # Dashboard, alert rule and Kafka-exporter scrape config for mini-MOS.
-# Wave -1: after the kube-prometheus-stack CRDs (-3) and the Kafka cluster (-2), before the
+# Wave -1: after the kube-prometheus-stack CRDs and the Kafka cluster (both -2), before the
 # services (0), so the dashboard and PodMonitor exist by the time traffic starts.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -30,6 +30,6 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      # Belt and braces: the monitoring CRDs arrive from wave -3, but if Argo's dry-run ever
+      # Belt and braces: the monitoring CRDs arrive from wave -2, but if Argo's dry-run ever
       # runs before they are registered, don't fail the sync on "unknown kind".
       - SkipDryRunOnMissingResource=true

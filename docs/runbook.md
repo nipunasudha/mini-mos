@@ -70,7 +70,21 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 
 Open https://localhost:8080 (accept the self-signed certificate).
 
-## 5. Destroy
+## 5. Pause between demos (the daily default)
+
+```sh
+make infra-pause    # terraform apply -var paused=true: deletes the node pool only
+make infra-up       # brings the nodes back; Argo CD and every app restart by themselves
+```
+
+Pausing keeps the cluster, Argo CD, all the apps and the Postgres volume, and removes only the nodes. What it costs while paused:
+- The zonal control plane is covered by the GKE free tier (one zonal or Autopilot cluster per billing account).
+- NAT is billed per VM, so with no VMs it costs nothing.
+- The 5 GB Postgres disk is about $0.50 a month.
+
+Kafka is ephemeral, so it restarts empty; the Topic Operator recreates the topics. If another cluster on the same billing account already uses the free tier, a paused cluster costs $0.10/hour, so destroy it instead.
+
+## 6. Destroy (end of the project, or a clean rebuild)
 
 **Pre-destroy step (do not skip).** Deleting a GKE cluster does not delete the persistent disks that Kafka and Postgres claimed. They keep costing money, and nothing in Terraform knows about them. Remove the workloads first so Kubernetes deletes the disks:
 
@@ -96,7 +110,7 @@ make infra-down     # = terraform destroy -target=module.network in infra/envs/d
 
 Destroy time, measured 2026-11-27: pre-destroy step **54s**, `make infra-down` **~10 min** (Argo CD 1m, node pool 3m10s, cluster 4m40s, network ~1m). After it, only the state bucket and the Artifact Registry images should remain: check `gcloud container clusters list`, `gcloud compute disks list`, `gcloud compute networks list`.
 
-## 6. Terratest
+## 7. Terratest
 
 All tests live in `infra/test/`. Each tier is a separate command; build tags stop the costly tiers from running by accident.
 

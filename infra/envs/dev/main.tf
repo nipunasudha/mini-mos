@@ -43,6 +43,7 @@ module "gke" {
   pods_range_name         = module.network.pods_range_name
   services_range_name     = module.network.services_range_name
   master_authorized_cidrs = var.master_authorized_cidrs
+  paused                  = var.paused
 
   depends_on = [google_project_service.enabled]
 }
