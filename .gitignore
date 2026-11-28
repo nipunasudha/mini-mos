@@ -51,3 +51,4 @@ terraform.rc
 # Helm
 charts/*/charts/
 charts/*/*.tgz
+/.mcp.json
